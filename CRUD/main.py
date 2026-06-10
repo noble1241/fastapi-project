@@ -59,6 +59,3 @@ def update_blog(id: int, request: schemas.Blog, db: Session = Depends(get_db)):
     blog.body = request.body
     db.commit()
     return Response(status_code=status.HTTP_202_ACCEPTED)
-
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
