@@ -4,6 +4,7 @@ from typing import Optional
 from CRUD import schemas, models
 import uvicorn
 from .database import SessionLocal, engine, Base
+from typing import List
 
 Base.metadata.create_all(engine)
 
@@ -28,7 +29,7 @@ def create_blog(request: schemas.Blog, db: Session = Depends(get_db)):
     db.refresh(blog)
     return blog
 
-@app.get("/blog")
+@app.get("/blog", response_model=List[schemas.ShowBlog], status_code=status.HTTP_200_OK)
 def get_all_blogs(db: Session = Depends(get_db)):
     blogs = db.query(models.Blog).all()
     return blogs
@@ -50,7 +51,7 @@ def delete_blog(id: int, db: Session = Depends(get_db)):
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-@app.put("/blog/{id}", status_code=status.HTTP_202_ACCEPTED)
+@app.put("/blog/{id}", status_code=status.HTTP_202_ACCEPTED, response_model=schemas.ShowBlog)
 def update_blog(id: int, request: schemas.Blog, db: Session = Depends(get_db)):
     blog = db.query(models.Blog).filter(models.Blog.id == id).first()
     if not blog:
@@ -59,3 +60,11 @@ def update_blog(id: int, request: schemas.Blog, db: Session = Depends(get_db)):
     blog.body = request.body
     db.commit()
     return Response(status_code=status.HTTP_202_ACCEPTED)
+
+@app.post("/user", status_code=status.HTTP_201_CREATED, response_model=schemas.ShowUser)
+def create_user(request: schemas.User, db: Session = Depends(get_db)):
+    user = models.User(name=request.name, email=request.email)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
