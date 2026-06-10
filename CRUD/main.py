@@ -1,70 +1,13 @@
-from fastapi import FastAPI, Depends, status, Response, HTTPException
+from fastapi import FastAPI
 from sqlalchemy.orm import Session
-from typing import Optional
 from CRUD import schemas, models
-import uvicorn
-from .database import SessionLocal, engine, Base
-from typing import List
+from .database import engine, Base
+from .routers import blog, user, authentication
 
-Base.metadata.create_all(engine)
+
+models.Base.metadata.create_all(engine)
 
 app = FastAPI()
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-@app.get("/")
-def read_root(db: Session = Depends(get_db)):
-    return {'message': 'Database connection successful!'}
-
-@app.post("/blog", status_code=status.HTTP_201_CREATED)
-def create_blog(request: schemas.Blog, db: Session = Depends(get_db)):
-    blog = models.Blog(title=request.title, body=request.body)
-    db.add(blog)
-    db.commit()
-    db.refresh(blog)
-    return blog
-
-@app.get("/blog", response_model=List[schemas.ShowBlog], status_code=status.HTTP_200_OK)
-def get_all_blogs(db: Session = Depends(get_db)):
-    blogs = db.query(models.Blog).all()
-    return blogs
-
-@app.get("/blog/{id}", status_code=status.HTTP_200_OK)
-def get_blog(id: int, db: Session = Depends(get_db)):
-    blog = db.query(models.Blog).filter(models.Blog.id == id).first()
-    if not blog:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Blog with id {id} not found")
-    #     return Response(status_code=status.HTTP_404_NOT_FOUND)
-    return blog
-
-@app.delete("/blog/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_blog(id: int, db: Session = Depends(get_db)):
-    blog = db.query(models.Blog).filter(models.Blog.id == id).first()
-    if not blog:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Blog with id {id} not found")
-    db.delete(blog)
-    db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-@app.put("/blog/{id}", status_code=status.HTTP_202_ACCEPTED, response_model=schemas.ShowBlog)
-def update_blog(id: int, request: schemas.Blog, db: Session = Depends(get_db)):
-    blog = db.query(models.Blog).filter(models.Blog.id == id).first()
-    if not blog:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Blog with id {id} not found")
-    blog.title = request.title
-    blog.body = request.body
-    db.commit()
-    return Response(status_code=status.HTTP_202_ACCEPTED)
-
-@app.post("/user", status_code=status.HTTP_201_CREATED, response_model=schemas.ShowUser)
-def create_user(request: schemas.User, db: Session = Depends(get_db)):
-    user = models.User(name=request.name, email=request.email)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
+app.include_router(blog.router)
+app.include_router(user.router)
+app.include_router(authentication.router)
