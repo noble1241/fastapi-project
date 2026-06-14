@@ -1,13 +1,13 @@
 from sqlalchemy.orm import Session
 from .. import models, schemas
-from fastAPI import HTTPException, status, Response
+from fastapi import HTTPException, status, Response
 
 def get_all(db: Session):
     blogs = db.query(models.Blog).all()
     return blogs
 
-def create(request: schemas.Blog, db: Session):
-    blog = models.Blog(title=request.title, body=request.body, user_id=1)
+def create(request: schemas.Blog, db: Session, current_user: models.User):
+    blog = models.Blog(title=request.title, body=request.body, user_id=current_user.id)
     db.add(blog)
     db.commit()
     db.refresh(blog)
@@ -34,4 +34,5 @@ def update(id: int, request: schemas.Blog, db: Session):
     blog.title = request.title
     blog.body = request.body
     db.commit()
-    return Response(status_code=status.HTTP_202_ACCEPTED)
+    db.refresh(blog)
+    return blog

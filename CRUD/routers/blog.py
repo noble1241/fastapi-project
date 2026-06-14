@@ -1,8 +1,8 @@
-from fastAPI import APIRouter, Depends, status, HTTPException, Response
-from .. import schemas, models, database, oauth2
+from fastapi import APIRouter, Depends, status
+from .. import schemas, models, database
+from . import oauth2
 from typing import List
 from sqlalchemy.orm import Session
-from .. database import get_db
 from ..repo import blog
 
 router = APIRouter(
@@ -18,7 +18,7 @@ def get_all_blogs(db: Session = Depends(get_db), current_user: schemas.User = De
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 def create_blog(request: schemas.Blog, db: Session = Depends(get_db), current_user: schemas.User = Depends(oauth2.get_current_user)):
-    return blog.create(request, db)
+    return blog.create(request, db, current_user)
 
 @router.get("/{id}", status_code=status.HTTP_200_OK)
 def get_blog(id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(oauth2.get_current_user)):

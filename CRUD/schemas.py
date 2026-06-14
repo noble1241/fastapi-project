@@ -1,13 +1,12 @@
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 class BlogBase(BaseModel):
     title: str
     body: str
 
 class Blog(BlogBase):
-    class Config():
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
         
 class User(BaseModel):
     name: str
@@ -15,20 +14,19 @@ class User(BaseModel):
     password: str
 
 class ShowUser(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
     name: str
     email: str
     blogs: List[Blog] = []
-
-    class Config():
-        orm_mode = True
         
 class ShowBlog(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     title: str
     body: str
-    creator: ShowUser
-
-    class Config():
-        orm_mode = True
+    creator: Optional[ShowUser] = None
         
 class Login(BaseModel):
     username: str
@@ -39,4 +37,4 @@ class Token(BaseModel):
     token_type: str
 
 class TokenData(BaseModel):
-    username: Optional[str] = None
+    email: Optional[str] = None
