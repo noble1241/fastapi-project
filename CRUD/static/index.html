@@ -149,10 +149,6 @@
         color: #405464;
       }
 
-      .hidden {
-        display: none;
-      }
-
       @media (max-width: 760px) {
         main {
           grid-template-columns: 1fr;
@@ -161,193 +157,232 @@
     </style>
   </head>
   <body>
-    <main>
-      <section>
-        <h1>Login</h1>
-        <form id="login-form">
-          <label>
-            Email
-            <input id="email" autocomplete="username" required type="email" />
-          </label>
-          <label>
-            Password
-            <input id="password" autocomplete="current-password" required type="password" />
-          </label>
-          <div class="row">
-            <button id="login-button" type="submit">Login</button>
-            <button class="secondary" id="logout-button" type="button">Logout</button>
-          </div>
-        </form>
-        <p class="status" id="login-status"></p>
-        <p class="token hidden" id="token-display"></p>
-      </section>
+    <div id="root"></div>
 
-      <section>
-        <h2>Protected Blogs</h2>
-        <form id="blog-form">
-          <label>
-            Title
-            <input id="blog-title" required />
-          </label>
-          <label>
-            Body
-            <textarea id="blog-body" required></textarea>
-          </label>
-          <div class="row">
-            <button id="create-button" type="submit">Create Blog</button>
-            <button class="secondary" id="refresh-button" type="button">Refresh Blogs</button>
-          </div>
-        </form>
-        <p class="status" id="blog-status"></p>
-        <div class="blogs" id="blogs"></div>
-      </section>
-    </main>
-
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script>
+      const { useCallback, useEffect, useState } = React;
       const tokenKey = "fastapi_blog_token";
-      const loginForm = document.querySelector("#login-form");
-      const blogForm = document.querySelector("#blog-form");
-      const loginStatus = document.querySelector("#login-status");
-      const blogStatus = document.querySelector("#blog-status");
-      const tokenDisplay = document.querySelector("#token-display");
-      const blogs = document.querySelector("#blogs");
-      const loginButton = document.querySelector("#login-button");
-      const createButton = document.querySelector("#create-button");
 
-      let token = localStorage.getItem(tokenKey) || "";
+      function App() {
+        const [email, setEmail] = useState("");
+        const [password, setPassword] = useState("");
+        const [token, setToken] = useState(() => localStorage.getItem(tokenKey) || "");
+        const [loginStatus, setLoginStatus] = useState({ message: "", type: "" });
+        const [blogStatus, setBlogStatus] = useState({ message: "", type: "" });
+        const [blogs, setBlogs] = useState([]);
+        const [title, setTitle] = useState("");
+        const [body, setBody] = useState("");
+        const [isLoggingIn, setIsLoggingIn] = useState(false);
+        const [isCreating, setIsCreating] = useState(false);
 
-      function setStatus(element, message, type = "") {
-        element.textContent = message;
-        element.className = `status ${type}`.trim();
-      }
+        const apiRequest = useCallback(
+          async (path, options = {}) => {
+            const headers = new Headers(options.headers || {});
+            if (token) {
+              headers.set("Authorization", `Bearer ${token}`);
+            }
 
-      function updateTokenDisplay() {
-        tokenDisplay.textContent = token ? `Token: ${token}` : "";
-        tokenDisplay.classList.toggle("hidden", !token);
-      }
+            const response = await fetch(path, { ...options, headers });
+            const contentType = response.headers.get("content-type") || "";
+            const data = contentType.includes("application/json") ? await response.json() : null;
 
-      async function request(path, options = {}) {
-        const headers = new Headers(options.headers || {});
-        if (token) {
-          headers.set("Authorization", `Bearer ${token}`);
+            if (!response.ok) {
+              const detail = data && data.detail ? data.detail : `Request failed with ${response.status}`;
+              throw new Error(detail);
+            }
+
+            return data;
+          },
+          [token]
+        );
+
+        const loadBlogs = useCallback(async () => {
+          if (!token) {
+            setBlogs([]);
+            setBlogStatus({ message: "Login first to load protected blogs.", type: "" });
+            return;
+          }
+
+          setBlogStatus({ message: "Loading blogs...", type: "" });
+          try {
+            const data = await apiRequest("/blog/");
+            setBlogs(data);
+            setBlogStatus({ message: "Blogs loaded.", type: "success" });
+          } catch (error) {
+            setBlogStatus({ message: error.message, type: "error" });
+          }
+        }, [apiRequest, token]);
+
+        useEffect(() => {
+          loadBlogs();
+        }, [loadBlogs]);
+
+        async function handleLogin(event) {
+          event.preventDefault();
+          setIsLoggingIn(true);
+          setLoginStatus({ message: "Signing in...", type: "" });
+
+          const form = new URLSearchParams();
+          form.set("username", email);
+          form.set("password", password);
+
+          try {
+            const data = await fetch("/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: form,
+            }).then(async (response) => {
+              const result = await response.json();
+              if (!response.ok) {
+                throw new Error(result.detail || `Request failed with ${response.status}`);
+              }
+              return result;
+            });
+
+            localStorage.setItem(tokenKey, data.access_token);
+            setToken(data.access_token);
+            setLoginStatus({ message: "Logged in. Token saved for protected requests.", type: "success" });
+          } catch (error) {
+            setLoginStatus({ message: error.message, type: "error" });
+          } finally {
+            setIsLoggingIn(false);
+          }
         }
 
-        const response = await fetch(path, { ...options, headers });
-        const contentType = response.headers.get("content-type") || "";
-        const body = contentType.includes("application/json") ? await response.json() : null;
+        async function handleCreateBlog(event) {
+          event.preventDefault();
+          setIsCreating(true);
+          setBlogStatus({ message: "Creating blog...", type: "" });
 
-        if (!response.ok) {
-          const message = body && body.detail ? body.detail : `Request failed with ${response.status}`;
-          throw new Error(message);
+          try {
+            await apiRequest("/blog/", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ title, body }),
+            });
+            setTitle("");
+            setBody("");
+            setBlogStatus({ message: "Blog created.", type: "success" });
+            await loadBlogs();
+          } catch (error) {
+            setBlogStatus({ message: error.message, type: "error" });
+          } finally {
+            setIsCreating(false);
+          }
         }
 
-        return body;
-      }
-
-      async function loadBlogs() {
-        if (!token) {
-          blogs.innerHTML = "";
-          setStatus(blogStatus, "Login first to load protected blogs.");
-          return;
+        function handleLogout() {
+          localStorage.removeItem(tokenKey);
+          setToken("");
+          setBlogs([]);
+          setLoginStatus({ message: "Logged out.", type: "success" });
+          setBlogStatus({ message: "Login first to load protected blogs.", type: "" });
         }
 
-        setStatus(blogStatus, "Loading blogs...");
-        try {
-          const data = await request("/blog/");
-          blogs.innerHTML = data.length
-            ? data
-                .map(
-                  (blog) => `
-                    <article>
-                      <h3>${escapeHtml(blog.title)}</h3>
-                      <p>${escapeHtml(blog.body)}</p>
-                    </article>
-                  `
+        return React.createElement(
+          "main",
+          null,
+          React.createElement(
+            "section",
+            null,
+            React.createElement("h1", null, "Login"),
+            React.createElement(
+              "form",
+              { onSubmit: handleLogin },
+              React.createElement(
+                "label",
+                null,
+                "Email",
+                React.createElement("input", {
+                  autoComplete: "username",
+                  onChange: (event) => setEmail(event.target.value),
+                  required: true,
+                  type: "email",
+                  value: email,
+                })
+              ),
+              React.createElement(
+                "label",
+                null,
+                "Password",
+                React.createElement("input", {
+                  autoComplete: "current-password",
+                  onChange: (event) => setPassword(event.target.value),
+                  required: true,
+                  type: "password",
+                  value: password,
+                })
+              ),
+              React.createElement(
+                "div",
+                { className: "row" },
+                React.createElement("button", { disabled: isLoggingIn, type: "submit" }, "Login"),
+                React.createElement("button", { className: "secondary", onClick: handleLogout, type: "button" }, "Logout")
+              )
+            ),
+            React.createElement("p", { className: `status ${loginStatus.type}`.trim() }, loginStatus.message),
+            token ? React.createElement("p", { className: "token" }, `Token: ${token}`) : null
+          ),
+          React.createElement(
+            "section",
+            null,
+            React.createElement("h2", null, "Protected Blogs"),
+            React.createElement(
+              "form",
+              { onSubmit: handleCreateBlog },
+              React.createElement(
+                "label",
+                null,
+                "Title",
+                React.createElement("input", {
+                  onChange: (event) => setTitle(event.target.value),
+                  required: true,
+                  value: title,
+                })
+              ),
+              React.createElement(
+                "label",
+                null,
+                "Body",
+                React.createElement("textarea", {
+                  onChange: (event) => setBody(event.target.value),
+                  required: true,
+                  value: body,
+                })
+              ),
+              React.createElement(
+                "div",
+                { className: "row" },
+                React.createElement("button", { disabled: isCreating, type: "submit" }, "Create Blog"),
+                React.createElement(
+                  "button",
+                  { className: "secondary", onClick: loadBlogs, type: "button" },
+                  "Refresh Blogs"
                 )
-                .join("")
-            : "<p>No blogs yet.</p>";
-          setStatus(blogStatus, "Blogs loaded.", "success");
-        } catch (error) {
-          setStatus(blogStatus, error.message, "error");
-        }
+              )
+            ),
+            React.createElement("p", { className: `status ${blogStatus.type}`.trim() }, blogStatus.message),
+            React.createElement(
+              "div",
+              { className: "blogs" },
+              blogs.length
+                ? blogs.map((blog, index) =>
+                    React.createElement(
+                      "article",
+                      { key: `${blog.title}-${index}` },
+                      React.createElement("h3", null, blog.title),
+                      React.createElement("p", null, blog.body)
+                    )
+                  )
+                : React.createElement("p", null, token ? "No blogs yet." : "")
+            )
+          )
+        );
       }
 
-      function escapeHtml(value) {
-        return String(value).replace(/[&<>"']/g, (character) => {
-          const entities = {
-            "&": "&amp;",
-            "<": "&lt;",
-            ">": "&gt;",
-            '"': "&quot;",
-            "'": "&#039;",
-          };
-          return entities[character];
-        });
-      }
-
-      loginForm.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        loginButton.disabled = true;
-        setStatus(loginStatus, "Signing in...");
-
-        const form = new URLSearchParams();
-        form.set("username", document.querySelector("#email").value);
-        form.set("password", document.querySelector("#password").value);
-
-        try {
-          const data = await request("/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: form,
-          });
-          token = data.access_token;
-          localStorage.setItem(tokenKey, token);
-          updateTokenDisplay();
-          setStatus(loginStatus, "Logged in. Token saved for protected requests.", "success");
-          await loadBlogs();
-        } catch (error) {
-          setStatus(loginStatus, error.message, "error");
-        } finally {
-          loginButton.disabled = false;
-        }
-      });
-
-      blogForm.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        createButton.disabled = true;
-        setStatus(blogStatus, "Creating blog...");
-
-        try {
-          await request("/blog/", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              title: document.querySelector("#blog-title").value,
-              body: document.querySelector("#blog-body").value,
-            }),
-          });
-          blogForm.reset();
-          setStatus(blogStatus, "Blog created.", "success");
-          await loadBlogs();
-        } catch (error) {
-          setStatus(blogStatus, error.message, "error");
-        } finally {
-          createButton.disabled = false;
-        }
-      });
-
-      document.querySelector("#refresh-button").addEventListener("click", loadBlogs);
-      document.querySelector("#logout-button").addEventListener("click", () => {
-        token = "";
-        localStorage.removeItem(tokenKey);
-        updateTokenDisplay();
-        blogs.innerHTML = "";
-        setStatus(loginStatus, "Logged out.", "success");
-        setStatus(blogStatus, "Login first to load protected blogs.");
-      });
-
-      updateTokenDisplay();
-      loadBlogs();
+      ReactDOM.createRoot(document.querySelector("#root")).render(React.createElement(App));
     </script>
   </body>
 </html>
