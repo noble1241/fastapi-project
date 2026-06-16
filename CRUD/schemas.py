@@ -24,6 +24,7 @@ class ShowUser(BaseModel):
 class ShowBlog(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    id: int
     title: str
     body: str
     creator: Optional[ShowUser] = None

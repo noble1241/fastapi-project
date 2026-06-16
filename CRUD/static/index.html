@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>FastAPI Blog Login</title>
+    <title>FastAPI Blog</title>
     <style>
       :root {
         color-scheme: light;
@@ -12,9 +12,7 @@
         color: #17202a;
       }
 
-      * {
-        box-sizing: border-box;
-      }
+      * { box-sizing: border-box; }
 
       body {
         margin: 0;
@@ -40,18 +38,9 @@
         box-shadow: 0 8px 24px rgba(24, 39, 56, 0.08);
       }
 
-      h1,
-      h2 {
-        margin: 0 0 16px;
-      }
-
-      h1 {
-        font-size: 1.45rem;
-      }
-
-      h2 {
-        font-size: 1.05rem;
-      }
+      h1, h2 { margin: 0 0 16px; }
+      h1 { font-size: 1.45rem; }
+      h2 { font-size: 1.05rem; }
 
       label {
         display: grid;
@@ -61,8 +50,7 @@
         color: #364957;
       }
 
-      input,
-      textarea {
+      input, textarea {
         width: 100%;
         border: 1px solid #bcc9d6;
         border-radius: 6px;
@@ -70,10 +58,7 @@
         font: inherit;
       }
 
-      textarea {
-        min-height: 88px;
-        resize: vertical;
-      }
+      textarea { min-height: 88px; resize: vertical; }
 
       button {
         border: 0;
@@ -86,36 +71,15 @@
         cursor: pointer;
       }
 
-      button.secondary {
-        background: #eef2f7;
-        color: #1f2d3a;
-      }
+      button.secondary { background: #eef2f7; color: #1f2d3a; }
+      button.danger { background: #b42318; }
+      button:disabled { opacity: 0.6; cursor: not-allowed; }
 
-      button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
+      .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 
-      .row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        align-items: center;
-      }
-
-      .status {
-        min-height: 22px;
-        margin-top: 12px;
-        font-size: 0.9rem;
-      }
-
-      .status.error {
-        color: #b42318;
-      }
-
-      .status.success {
-        color: #146c43;
-      }
+      .status { min-height: 22px; margin-top: 12px; font-size: 0.9rem; }
+      .status.error { color: #b42318; }
+      .status.success { color: #146c43; }
 
       .token {
         overflow-wrap: anywhere;
@@ -126,11 +90,7 @@
         margin-top: 12px;
       }
 
-      .blogs {
-        display: grid;
-        gap: 12px;
-        margin-top: 16px;
-      }
+      .blogs { display: grid; gap: 12px; margin-top: 16px; }
 
       article {
         border: 1px solid #dce3ea;
@@ -138,251 +98,41 @@
         padding: 14px;
       }
 
-      article h3 {
-        margin: 0 0 6px;
-        font-size: 1rem;
+      article h3 { margin: 0 0 6px; font-size: 1rem; }
+      article p { margin: 0; line-height: 1.45; color: #405464; }
+
+      .article-actions { display: flex; gap: 8px; margin-top: 10px; }
+      .article-actions button { font-size: 0.82rem; padding: 6px 10px; }
+
+      .edit-form { margin-top: 10px; display: grid; gap: 8px; }
+
+      .tabs {
+        display: flex;
+        border-bottom: 2px solid #dce3ea;
+        margin-bottom: 16px;
       }
 
-      article p {
-        margin: 0;
-        line-height: 1.45;
-        color: #405464;
+      .tab {
+        background: none;
+        border: 0;
+        border-radius: 0;
+        color: #64788a;
+        font-weight: 600;
+        padding: 8px 16px;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
       }
+
+      .tab.active { color: #1967d2; border-bottom-color: #1967d2; }
 
       @media (max-width: 760px) {
-        main {
-          grid-template-columns: 1fr;
-        }
+        main { grid-template-columns: 1fr; }
       }
     </style>
   </head>
   <body>
     <div id="root"></div>
-
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script>
-      const { useCallback, useEffect, useState } = React;
-      const tokenKey = "fastapi_blog_token";
-
-      function App() {
-        const [email, setEmail] = useState("");
-        const [password, setPassword] = useState("");
-        const [token, setToken] = useState(() => localStorage.getItem(tokenKey) || "");
-        const [loginStatus, setLoginStatus] = useState({ message: "", type: "" });
-        const [blogStatus, setBlogStatus] = useState({ message: "", type: "" });
-        const [blogs, setBlogs] = useState([]);
-        const [title, setTitle] = useState("");
-        const [body, setBody] = useState("");
-        const [isLoggingIn, setIsLoggingIn] = useState(false);
-        const [isCreating, setIsCreating] = useState(false);
-
-        const apiRequest = useCallback(
-          async (path, options = {}) => {
-            const headers = new Headers(options.headers || {});
-            if (token) {
-              headers.set("Authorization", `Bearer ${token}`);
-            }
-
-            const response = await fetch(path, { ...options, headers });
-            const contentType = response.headers.get("content-type") || "";
-            const data = contentType.includes("application/json") ? await response.json() : null;
-
-            if (!response.ok) {
-              const detail = data && data.detail ? data.detail : `Request failed with ${response.status}`;
-              throw new Error(detail);
-            }
-
-            return data;
-          },
-          [token]
-        );
-
-        const loadBlogs = useCallback(async () => {
-          if (!token) {
-            setBlogs([]);
-            setBlogStatus({ message: "Login first to load protected blogs.", type: "" });
-            return;
-          }
-
-          setBlogStatus({ message: "Loading blogs...", type: "" });
-          try {
-            const data = await apiRequest("/blog/");
-            setBlogs(data);
-            setBlogStatus({ message: "Blogs loaded.", type: "success" });
-          } catch (error) {
-            setBlogStatus({ message: error.message, type: "error" });
-          }
-        }, [apiRequest, token]);
-
-        useEffect(() => {
-          loadBlogs();
-        }, [loadBlogs]);
-
-        async function handleLogin(event) {
-          event.preventDefault();
-          setIsLoggingIn(true);
-          setLoginStatus({ message: "Signing in...", type: "" });
-
-          const form = new URLSearchParams();
-          form.set("username", email);
-          form.set("password", password);
-
-          try {
-            const data = await fetch("/login", {
-              method: "POST",
-              headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body: form,
-            }).then(async (response) => {
-              const result = await response.json();
-              if (!response.ok) {
-                throw new Error(result.detail || `Request failed with ${response.status}`);
-              }
-              return result;
-            });
-
-            localStorage.setItem(tokenKey, data.access_token);
-            setToken(data.access_token);
-            setLoginStatus({ message: "Logged in. Token saved for protected requests.", type: "success" });
-          } catch (error) {
-            setLoginStatus({ message: error.message, type: "error" });
-          } finally {
-            setIsLoggingIn(false);
-          }
-        }
-
-        async function handleCreateBlog(event) {
-          event.preventDefault();
-          setIsCreating(true);
-          setBlogStatus({ message: "Creating blog...", type: "" });
-
-          try {
-            await apiRequest("/blog/", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ title, body }),
-            });
-            setTitle("");
-            setBody("");
-            setBlogStatus({ message: "Blog created.", type: "success" });
-            await loadBlogs();
-          } catch (error) {
-            setBlogStatus({ message: error.message, type: "error" });
-          } finally {
-            setIsCreating(false);
-          }
-        }
-
-        function handleLogout() {
-          localStorage.removeItem(tokenKey);
-          setToken("");
-          setBlogs([]);
-          setLoginStatus({ message: "Logged out.", type: "success" });
-          setBlogStatus({ message: "Login first to load protected blogs.", type: "" });
-        }
-
-        return React.createElement(
-          "main",
-          null,
-          React.createElement(
-            "section",
-            null,
-            React.createElement("h1", null, "Login"),
-            React.createElement(
-              "form",
-              { onSubmit: handleLogin },
-              React.createElement(
-                "label",
-                null,
-                "Email",
-                React.createElement("input", {
-                  autoComplete: "username",
-                  onChange: (event) => setEmail(event.target.value),
-                  required: true,
-                  type: "email",
-                  value: email,
-                })
-              ),
-              React.createElement(
-                "label",
-                null,
-                "Password",
-                React.createElement("input", {
-                  autoComplete: "current-password",
-                  onChange: (event) => setPassword(event.target.value),
-                  required: true,
-                  type: "password",
-                  value: password,
-                })
-              ),
-              React.createElement(
-                "div",
-                { className: "row" },
-                React.createElement("button", { disabled: isLoggingIn, type: "submit" }, "Login"),
-                React.createElement("button", { className: "secondary", onClick: handleLogout, type: "button" }, "Logout")
-              )
-            ),
-            React.createElement("p", { className: `status ${loginStatus.type}`.trim() }, loginStatus.message),
-            token ? React.createElement("p", { className: "token" }, `Token: ${token}`) : null
-          ),
-          React.createElement(
-            "section",
-            null,
-            React.createElement("h2", null, "Protected Blogs"),
-            React.createElement(
-              "form",
-              { onSubmit: handleCreateBlog },
-              React.createElement(
-                "label",
-                null,
-                "Title",
-                React.createElement("input", {
-                  onChange: (event) => setTitle(event.target.value),
-                  required: true,
-                  value: title,
-                })
-              ),
-              React.createElement(
-                "label",
-                null,
-                "Body",
-                React.createElement("textarea", {
-                  onChange: (event) => setBody(event.target.value),
-                  required: true,
-                  value: body,
-                })
-              ),
-              React.createElement(
-                "div",
-                { className: "row" },
-                React.createElement("button", { disabled: isCreating, type: "submit" }, "Create Blog"),
-                React.createElement(
-                  "button",
-                  { className: "secondary", onClick: loadBlogs, type: "button" },
-                  "Refresh Blogs"
-                )
-              )
-            ),
-            React.createElement("p", { className: `status ${blogStatus.type}`.trim() }, blogStatus.message),
-            React.createElement(
-              "div",
-              { className: "blogs" },
-              blogs.length
-                ? blogs.map((blog, index) =>
-                    React.createElement(
-                      "article",
-                      { key: `${blog.title}-${index}` },
-                      React.createElement("h3", null, blog.title),
-                      React.createElement("p", null, blog.body)
-                    )
-                  )
-                : React.createElement("p", null, token ? "No blogs yet." : "")
-            )
-          )
-        );
-      }
-
-      ReactDOM.createRoot(document.querySelector("#root")).render(React.createElement(App));
-    </script>
+    <script type="module" src="/static/js/App.js"></script>
   </body>
 </html>
